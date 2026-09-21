@@ -1,19 +1,8 @@
 services:
-  postgres:
-    image: postgres:18
-    container_name: ecommerce-postgres
-    restart: unless-stopped
-
-    environment:
-      POSTGRES_USER: ecommerce
-      POSTGRES_PASSWORD: ecommerce_password
-      POSTGRES_DB: ecommerce
-
+  auth-service:
+    build: ./backend/auth-service
+    container_name: ecommerce-auth
     ports:
-      - "5432:5432"
-
-    volumes:
-      - postgres_data:/var/lib/postgresql
-
-volumes:
-  postgres_data:
+      - "4001:4000"
+    env_file:
+      - ./backend/auth-service/.env
