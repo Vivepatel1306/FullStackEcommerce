@@ -22,4 +22,5 @@ export class RegisterDto {
   @IsString()
   @MaxLength(50)
   lastName?: string;
+  
 }

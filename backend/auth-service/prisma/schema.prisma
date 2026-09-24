@@ -14,14 +14,19 @@ enum Role {
 }
 
 model User {
-  id           Int      @id @default(autoincrement())
-  email        String   @unique
-  passwordHash String
-  firstName    String
-  lastName     String?
-  role         Role     @default(USER)
-  isVerified   Boolean  @default(false)
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                    Int       @id @default(autoincrement())
+  email                 String    @unique
+  passwordHash          String
+  refreshTokenHash      String?
+  verificationTokenHash String?
+  verificationExpiresAt DateTime?
+  passwordResetTokenHash String?
+  passwordResetExpiresAt DateTime?
+  firstName             String
+  lastName              String?
+  role                  Role      @default(USER)
+  isVerified            Boolean   @default(false)
+  isActive              Boolean   @default(true)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 }
