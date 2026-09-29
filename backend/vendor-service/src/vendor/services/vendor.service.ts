@@ -4,6 +4,7 @@ import { RedisService } from "../../redis/redis.service";
 import { CreateVendorDto } from "../dto/create-vendor.dto";
 import { UpdateVendorDto } from "../dto/update-vendor.dto";
 import { VendorReviewDto } from "../dto/vendor-review.dto";
+import { VendorStatus } from "../enums/vendor-status.enum";
 import { VendorRepository } from "./vendor.repository";
 
 @Injectable()
@@ -33,6 +34,10 @@ export class VendorService {
     if (!vendor) throw new NotFoundException("Vendor not found");
     await this.cache.set(`vendor:${id}`, vendor);
     return vendor;
+  }
+
+  findMany(status?: VendorStatus) {
+    return this.repository.findMany(status);
   }
   async update(id: string, input: UpdateVendorDto) {
     await this.ensureExists(id);
