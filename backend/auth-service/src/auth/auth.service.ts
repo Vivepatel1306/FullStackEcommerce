@@ -15,6 +15,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { EmailService } from '../email/email.service';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Injectable()
 export class AuthService {
@@ -246,12 +249,13 @@ private hashVerificationToken(token: string): string {
           email,
         },
       });
-
+    
     if (!user) {
       throw new UnauthorizedException(
         'Invalid email or password',
       );
     }
+  
 
     // Compare password
     const passwordMatch =
@@ -265,6 +269,11 @@ private hashVerificationToken(token: string): string {
         'Invalid email or password',
       );
     }
+      if (!user.isVerified) {
+  throw new UnauthorizedException(
+    'Please verify your email before logging in',
+  );
+}
 
     // Check account status
     if (!user.isActive) {
@@ -556,4 +565,196 @@ async resendVerification(email: string) {
         'Logout successful',
     };
   }
+
+  async forgotPassword(
+  forgotPasswordDto: ForgotPasswordDto,
+) {
+  const { email } = forgotPasswordDto;
+
+  const user =
+    await this.prisma.user.findUnique({
+      where: {
+        email,
+      },
+    });
+
+  // Don't reveal whether the email exists
+  if (!user) {
+    return {
+      message:
+        'If the email exists, a password reset link has been sent',
+    };
+  }
+
+  // Generate reset token
+  const resetToken =
+    randomBytes(32).toString('hex');
+
+  // Hash reset token
+  const resetTokenHash =
+    createHash('sha256')
+      .update(resetToken)
+      .digest('hex');
+
+  // Token expires in 15 minutes
+  const resetExpiresAt =
+    new Date(
+      Date.now() + 15 * 60 * 1000,
+    );
+
+  // Store hash + expiry
+  await this.prisma.user.update({
+    where: {
+      id: user.id,
+    },
+    data: {
+      passwordResetTokenHash:
+        resetTokenHash,
+      passwordResetExpiresAt:
+        resetExpiresAt,
+    },
+  });
+
+  // Send reset email
+  const resetUrl =
+    `http://localhost:4001/auth/reset-password?token=${resetToken}`;
+
+  await this.emailService.sendPasswordResetEmail(
+    user.email,
+    resetUrl,
+  );
+
+  return {
+    message:
+      'If the email exists, a password reset link has been sent',
+  };
+}
+
+  async resetPassword(
+  resetPasswordDto: ResetPasswordDto,
+) {
+  const {
+    token,
+    newPassword,
+  } = resetPasswordDto;
+
+  if (!token) {
+    throw new UnauthorizedException(
+      'Reset token is required',
+    );
+  }
+
+  // Hash the incoming token
+  const tokenHash =
+    createHash('sha256')
+      .update(token)
+      .digest('hex');
+
+  // Find user
+  const user =
+    await this.prisma.user.findFirst({
+      where: {
+        passwordResetTokenHash: tokenHash,
+      },
+    });
+
+  if (!user) {
+    throw new UnauthorizedException(
+      'Invalid or expired reset token',
+    );
+  }
+
+  // Check expiry
+  if (
+    !user.passwordResetExpiresAt ||
+    user.passwordResetExpiresAt < new Date()
+  ) {
+    throw new UnauthorizedException(
+      'Invalid or expired reset token',
+    );
+  }
+
+  // Hash new password
+  const passwordHash =
+    await bcrypt.hash(
+      newPassword,
+      12,
+    );
+
+  // Update password and invalidate tokens
+  await this.prisma.user.update({
+    where: {
+      id: user.id,
+    },
+    data: {
+      passwordHash,
+
+      passwordResetTokenHash: null,
+      passwordResetExpiresAt: null,
+
+      refreshTokenHash: null,
+    },
+  });
+
+  return {
+    message:
+      'Password reset successfully',
+  };
+}
+
+
+async changePassword(
+  userId: number,
+  changePasswordDto: ChangePasswordDto,
+) {
+  const {
+    currentPassword,
+    newPassword,
+  } = changePasswordDto;
+
+  const user =
+    await this.prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+    });
+
+  if (!user) {
+    throw new UnauthorizedException(
+      'User not found',
+    );
+  }
+
+  const passwordMatches =
+    await bcrypt.compare(
+      currentPassword,
+      user.passwordHash,
+    );
+
+  if (!passwordMatches) {
+    throw new UnauthorizedException(
+      'Current password is incorrect',
+    );
+  }
+
+  const newPasswordHash =
+    await bcrypt.hash(
+      newPassword,
+      12,
+    );
+
+  await this.prisma.user.update({
+    where: {
+      id: userId,
+    },
+    data: {
+      passwordHash: newPasswordHash,
+      refreshTokenHash: null,
+    },
+  });
+
+  return {
+    message: 'Password changed successfully',
+  };
+}
 }

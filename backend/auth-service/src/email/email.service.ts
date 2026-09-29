@@ -45,9 +45,34 @@ export class EmailService {
       `,
     });
 
-  console.log('2. Email sent');
-  console.log('3. Message ID:', info.messageId);
-  console.log('4. Accepted:', info.accepted);
-  console.log('5. Rejected:', info.rejected);
-  }
+}
+async sendPasswordResetEmail(
+  email: string,
+  resetUrl: string,
+) {
+  await this.transporter.sendMail({
+    from: process.env.SMTP_FROM,
+    to: email,
+    subject: 'Reset your password',
+    html: `
+      <h2>Reset your password</h2>
+
+      <p>
+        We received a request to reset your password.
+      </p>
+
+      <a href="${resetUrl}">
+        Reset Password
+      </a>
+
+      <p>
+        This link expires in 15 minutes.
+      </p>
+
+      <p>
+        If you did not request this, you can ignore this email.
+      </p>
+    `,
+  });
+}
 }
