@@ -5,10 +5,13 @@ import {
   Headers,
   Post,
   Query,
+  Request,
+  UseGuards
 } from '@nestjs/common';
 
 import { AuthService } from './auth.service';
 
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -59,5 +62,12 @@ export class AuthController {
 verifyEmail(@Query('token') token: string) {
   return this.authService.verifyEmail(token);
 }
-  
+@Get('profile')
+@UseGuards(JwtAuthGuard)
+getProfile(@Request() request: any) {
+  return {
+    message: 'You are authenticated',
+    user: request.user,
+  };
+}
 }
