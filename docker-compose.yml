@@ -1,10 +1,52 @@
 services:
-
+  # =========================
+  # AUTH SERVICE
+  # =========================
   auth-service:
     build:
       context: ./backend/auth-service
-    container_name: ecommerce-auth-service
+    container_name: ecommerce-auth
     ports:
       - "4001:4000"
     env_file:
       - ./backend/auth-service/.env
+
+  # =========================
+  # NOTIFICATION SERVICE
+  # =========================
+  notification-service:
+    build:
+      context: ./backend/notification-service
+    container_name: ecommerce-notification
+    ports:
+      - "4002:3003"
+    env_file:
+      - ./backend/notification-service/.env
+
+  # =========================
+  # PRODUCT SERVICE
+  # =========================
+  product-service:
+    build:
+      context: ./backend/product-service
+    container_name: ecommerce-product
+    ports:
+      - "4003:4000"
+    env_file:
+      - ./backend/product-service/.env
+
+  # =========================
+  # API GATEWAY
+  # =========================
+  api-gateway:
+    build:
+      context: ./backend/api-gateway
+    container_name: ecommerce-api-gateway
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./backend/api-gateway/.env
+    depends_on:
+      - auth-service
+      - product-service
+      - notification-service
