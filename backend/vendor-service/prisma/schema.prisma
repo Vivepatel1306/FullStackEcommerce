@@ -1,0 +1,60 @@
+generator client {
+  provider = "prisma-client"
+  output = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum VendorStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum DocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+model Vendor {
+  id String @id @default(uuid())
+  ownerId String @unique
+  businessName String
+  legalName String
+  email String
+  phone String?
+  status VendorStatus @default(PENDING)
+  rejectionReason String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  address VendorAddress?
+  documents VendorDocument[]
+  @@index([status])
+}
+model VendorAddress {
+  id String @id @default(uuid())
+  vendorId String @unique
+  line1 String
+  line2 String?
+  city String
+  state String
+  postalCode String
+  country String
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+}
+model VendorDocument {
+  id String @id @default(uuid())
+  vendorId String
+  documentType String
+  objectKey String
+  fileName String
+  status DocumentStatus @default(PENDING)
+  reviewedAt DateTime?
+  createdAt DateTime @default(now())
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  @@index([vendorId, status])
+}
