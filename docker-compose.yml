@@ -6,3 +6,11 @@ services:
       - "4001:4000"
     env_file:
       - ./backend/auth-service/.env
+
+  notification-service:
+    build: ./backend/notification-service
+    container_name: ecommerce-notification
+    ports:
+      - "4002:3003"
+    env_file:
+      - ./backend/notification-service/.env

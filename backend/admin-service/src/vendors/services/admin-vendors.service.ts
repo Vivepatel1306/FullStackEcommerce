@@ -13,7 +13,7 @@ export class AdminVendorsService {
     if (status) url.searchParams.set("status", status);
     return this.request(url);
   }
-  
+
   get(id: string) {
     return this.request(new URL(`/vendors/${id}`, this.vendorServiceUrl));
   }
