@@ -1,102 +1,221 @@
 import {
+  ConflictException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { GetProductsDto } from './dto/get-products.dto';
+
 @Injectable()
 export class ProductService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // =========================
+  // CREATE
+  // =========================
+
   async create(createProductDto: CreateProductDto) {
-    return this.prisma.product.create({
-      data: createProductDto,
-    });
+    try {
+      const product = await this.prisma.product.create({
+        data: {
+          name: createProductDto.name,
+          description: createProductDto.description,
+          price: createProductDto.price,
+          category: createProductDto.category,
+          imageUrl: createProductDto.imageUrl,
+          isActive: true,
+        },
+      });
+
+      return {
+        message: 'Product created successfully',
+        product,
+      };
+    } catch (error) {
+      this.handlePrismaError(error);
+    }
   }
 
- async findAll(getProductsDto: GetProductsDto) {
-  const {
-    page = 1,
-    limit = 10,
-    search,
-    category,
-  } = getProductsDto;
+  // =========================
+  // GET ALL
+  // =========================
 
-  const skip = (page - 1) * limit;
+  async findAll(getProductsDto: GetProductsDto) {
+    try {
+      const {
+        page = 1,
+        limit = 10,
+        search,
+        category,
+      } = getProductsDto;
 
-  const where = {
-    isActive: true,
+      const skip = (page - 1) * limit;
 
-    ...(search && {
-      name: {
-        contains: search,
-        mode: 'insensitive' as const,
-      },
-    }),
+      const where: Prisma.ProductWhereInput = {
+        isActive: true,
 
-    ...(category && {
-      category: {
-        equals: category,
-        mode: 'insensitive' as const,
-      },
-    }),
-  };
+        ...(search && {
+          name: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        }),
 
-  const [products, total] = await Promise.all([
-    this.prisma.product.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: {
-        createdAt: 'desc',
-      },
-    }),
+        ...(category && {
+          category: {
+            equals: category,
+            mode: 'insensitive',
+          },
+        }),
+      };
 
-    this.prisma.product.count({
-      where,
-    }),
-  ]);
+      const [products, total] = await Promise.all([
+        this.prisma.product.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: {
+            createdAt: 'desc',
+          },
+        }),
+
+        this.prisma.product.count({
+          where,
+        }),
+      ]);
+
+      const totalPages = Math.ceil(total / limit);
+
+      return {
+        products,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1,
+        },
+      };
+    } catch (error) {
+      this.handlePrismaError(error);
+    }
+  }
+
+  // =========================
+  // GET ONE
+  // =========================
+
+  async findOne(id: number) {
+    return this.findActiveProduct(id);
+  }
+
+  // =========================
+  // UPDATE
+  // =========================
+
+  async update(
+    id: number,
+    updateProductDto: UpdateProductDto,
+  ) {
+    // First check whether product exists
+    await this.findActiveProduct(id);
+
+    try {
+      const product = await this.prisma.product.update({
+        where: {
+          id,
+        },
+        data: updateProductDto,
+      });
+
+      return {
+        message: 'Product updated successfully',
+        product,
+      };
+    } catch (error) {
+      this.handlePrismaError(error);
+    }
+  }
+
+  // =========================
+  // DELETE
+  // =========================
+
+ async remove(id: number) {
+
+  await this.findActiveProduct(id);
+
+  const updatedProduct = await this.prisma.product.update({
+    where: { id },
+    data: { isActive: false },
+  });
+
+  console.log('PRODUCT UPDATED:', updatedProduct);
 
   return {
-    products,
-    pagination: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    },
+    message: 'Product deleted successfully',
+    product: updatedProduct,
   };
 }
 
-  async findOne(id: number) {
+  // =========================
+  // CHECK PRODUCT EXISTS
+  // =========================
+
+  private async findActiveProduct(id: number) {
     const product = await this.prisma.product.findUnique({
-      where: { id },
+      where: {
+        id,
+      },
     });
 
-    if (!product) {
-      throw new NotFoundException('Product not found');
-    }
+    if (!product || !product.isActive) {
+    console.log('PRODUCT IS NOT ACTIVE');
+    throw new NotFoundException(
+      `Product with ID ${id} not found`,
+    );
+  }
 
     return product;
   }
 
-  async update(id: number, updateProductDto: UpdateProductDto) {
-    await this.findOne(id);
+  // =========================
+  // PRISMA ERROR HANDLER
+  // =========================
 
-    return this.prisma.product.update({
-      where: { id },
-      data: updateProductDto,
-    });
+  private handlePrismaError(error: unknown): never {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      switch (error.code) {
+        case 'P2025':
+          throw new NotFoundException(
+            'Product not found',
+          );
+
+        case 'P2002':
+          throw new ConflictException(
+            'Product already exists',
+          );
+
+        case 'P2003':
+          throw new ConflictException(
+            'Product cannot be modified because it is referenced by another record',
+          );
+
+        default:
+          throw new InternalServerErrorException(
+            'Database operation failed',
+          );
+      }
+    }
+
+    throw new InternalServerErrorException(
+      'Something went wrong while processing the product',
+    );
   }
-
-  async remove(id: number) {
-    await this.findOne(id);
-
-    return this.prisma.product.delete({
-      where: { id },
-    });
-  }
-  
 }

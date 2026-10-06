@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-import { AxiosError } from 'axios';
+import axios from 'axios';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
@@ -20,25 +20,28 @@ export class ProductService {
     return this.configService.getOrThrow<string>('PRODUCT_SERVICE_URL');
   }
 
-  private handleError(error: unknown): never {
-    if (error instanceof AxiosError) {
-      const status = error.response?.status;
-      const message = error.response?.data?.message;
+ private handleError(error: unknown): never {
 
-      if (status === 400) {
-        throw new BadRequestException(message ?? 'Bad request');
-      }
 
-      if (status === 404) {
-        throw new NotFoundException(message ?? 'Product not found');
-      }
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status;
+    const message = error.response?.data?.message;
+
+
+
+    if (status === 400) {
+      throw new BadRequestException(message ?? 'Bad request');
     }
 
-    throw new InternalServerErrorException(
-      'Product service is unavailable',
-    );
+    if (status === 404) {
+      throw new NotFoundException(message ?? 'Product not found');
+    }
   }
 
+  throw new InternalServerErrorException(
+    'Product service is unavailable',
+  );
+}
   async create(data: any) {
     try {
       const response = await firstValueFrom(

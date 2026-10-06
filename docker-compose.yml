@@ -1,8 +1,31 @@
 services:
+
   auth-service:
-    build: ./backend/auth-service
-    container_name: ecommerce-auth
+    build:
+      context: ./backend/auth-service
+    container_name: ecommerce-auth-service
     ports:
       - "4001:4000"
     env_file:
       - ./backend/auth-service/.env
+
+  product-service:
+    build:
+      context: ./backend/product-service
+    container_name: ecommerce-product-service
+    ports:
+      - "4002:4000"
+    env_file:
+      - ./backend/product-service/.env
+
+  api-gateway:
+    build:
+      context: ./backend/api-gateway
+    container_name: ecommerce-api-gateway
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./backend/api-gateway/.env
+    depends_on:
+      - auth-service
+      - product-service
