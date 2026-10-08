@@ -8,6 +8,7 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import axios from 'axios';
 import { ConfigService } from '@nestjs/config';
+import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
 
 @Injectable()
 export class ProductService {
@@ -42,21 +43,28 @@ export class ProductService {
     'Product service is unavailable',
   );
 }
-  async create(data: any) {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.post(
-          `${this.productServiceUrl}/products`,
-          data,
-        ),
-      );
+async create(
+  data: any,
+  authorization: string,
+) {
+  try {
+    const response = await firstValueFrom(
+      this.httpService.post(
+        `${this.productServiceUrl}/products`,
+        data,
+        {
+          headers: {
+            Authorization: authorization,
+          },
+        },
+      ),
+    );
 
-      return response.data;
-    } catch (error) {
-      this.handleError(error);
-    }
+    return response.data;
+  } catch (error) {
+    this.handleError(error);
   }
-
+}
   async findAll(query: any) {
     try {
       const response = await firstValueFrom(
@@ -88,22 +96,32 @@ export class ProductService {
     }
   }
 
-  async update(id: number, data: any) {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.patch(
-          `${this.productServiceUrl}/products/${id}`,
-          data,
-        ),
-      );
+ async update(
+  id: number,
+  data: any,
+  user: JwtPayload,
+  authorization: string,
+) {
+  try {
+    const response = await firstValueFrom(
+      this.httpService.patch(
+        `${this.productServiceUrl}/products/${id}`,
+        data,
+        {
+          headers: {
+            Authorization: authorization,
+          },
+        },
+      ),
+    );
 
-      return response.data;
-    } catch (error) {
-      this.handleError(error);
-    }
+    return response.data;
+  } catch (error) {
+    this.handleError(error);
   }
-
-  async remove(id: number) {
+}
+  async remove(id: number,
+  user: JwtPayload) {
     try {
       const response = await firstValueFrom(
         this.httpService.delete(

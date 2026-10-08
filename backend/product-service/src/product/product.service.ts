@@ -1,25 +1,35 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
+
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { GetProductsDto } from './dto/get-products.dto';
 
+import { AuthenticatedUser } from '../common/interfaces/user.interface';
+
 @Injectable()
 export class ProductService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+  ) {}
 
   // =========================
   // CREATE
   // =========================
 
-  async create(createProductDto: CreateProductDto) {
+  async create(
+    createProductDto: CreateProductDto,
+    user: AuthenticatedUser,
+  ) {
     try {
       const product = await this.prisma.product.create({
         data: {
@@ -28,6 +38,11 @@ export class ProductService {
           price: createProductDto.price,
           category: createProductDto.category,
           imageUrl: createProductDto.imageUrl,
+
+          // Store the authenticated user's ID
+          // as the product owner/vendor.
+          vendorId: user.sub,
+
           isActive: true,
         },
       });
@@ -45,7 +60,8 @@ export class ProductService {
   // GET ALL
   // =========================
 
-  async findAll(getProductsDto: GetProductsDto) {
+  async findAll( getProductsDto: GetProductsDto,
+  ) {
     try {
       const {
         page = 1,
@@ -89,17 +105,24 @@ export class ProductService {
         }),
       ]);
 
-      const totalPages = Math.ceil(total / limit);
+      const totalPages = Math.ceil(
+        total / limit,
+      );
 
       return {
         products,
+
         pagination: {
           page,
           limit,
           total,
           totalPages,
-          hasNextPage: page < totalPages,
-          hasPreviousPage: page > 1,
+
+          hasNextPage:
+            page < totalPages,
+
+          hasPreviousPage:
+            page > 1,
         },
       };
     } catch (error) {
@@ -122,21 +145,37 @@ export class ProductService {
   async update(
     id: number,
     updateProductDto: UpdateProductDto,
+    user: AuthenticatedUser,
   ) {
-    // First check whether product exists
-    await this.findActiveProduct(id);
+    const product =
+      await this.findActiveProduct(id);
+
+    // Vendors can only modify their own products.
+    // ADMIN can modify any product.
+    if (
+      user.role === 'VENDOR' &&
+      product.vendorId !== user.sub
+    ) {
+      throw new ForbiddenException(
+        'You can only update your own products',
+      );
+    }
 
     try {
-      const product = await this.prisma.product.update({
-        where: {
-          id,
-        },
-        data: updateProductDto,
-      });
+      const updatedProduct =
+        await this.prisma.product.update({
+          where: {
+            id,
+          },
+
+          data: updateProductDto,
+        });
 
       return {
-        message: 'Product updated successfully',
-        product,
+        message:
+          'Product updated successfully',
+
+        product: updatedProduct,
       };
     } catch (error) {
       this.handlePrismaError(error);
@@ -147,40 +186,70 @@ export class ProductService {
   // DELETE
   // =========================
 
- async remove(id: number) {
+  async remove(
+    id: number,
+    user: AuthenticatedUser,
+  ) {
+    const product =
+      await this.findActiveProduct(id);
 
-  await this.findActiveProduct(id);
+    // Vendors can only delete their own products.
+    // ADMIN can delete any product.
+    if (
+      user.role === 'VENDOR' &&
+      product.vendorId !== user.sub
+    ) {
+      throw new ForbiddenException(
+        'You can only delete your own products',
+      );
+    }
 
-  const updatedProduct = await this.prisma.product.update({
-    where: { id },
-    data: { isActive: false },
-  });
+    try {
+      const updatedProduct =
+        await this.prisma.product.update({
+          where: {
+            id,
+          },
 
-  console.log('PRODUCT UPDATED:', updatedProduct);
+          // Soft delete
+          data: {
+            isActive: false,
+          },
+        });
 
-  return {
-    message: 'Product deleted successfully',
-    product: updatedProduct,
-  };
-}
+      return {
+        message:
+          'Product deleted successfully',
+
+        product: updatedProduct,
+      };
+    } catch (error) {
+      this.handlePrismaError(error);
+    }
+  }
 
   // =========================
   // CHECK PRODUCT EXISTS
   // =========================
 
-  private async findActiveProduct(id: number) {
-    const product = await this.prisma.product.findUnique({
-      where: {
-        id,
-      },
-    });
+  private async findActiveProduct(
+    id: number,
+  ) {
+    const product =
+      await this.prisma.product.findUnique({
+        where: {
+          id,
+        },
+      });
 
-    if (!product || !product.isActive) {
-    console.log('PRODUCT IS NOT ACTIVE');
-    throw new NotFoundException(
-      `Product with ID ${id} not found`,
-    );
-  }
+    if (
+      !product ||
+      !product.isActive
+    ) {
+      throw new NotFoundException(
+        `Product with ID ${id} not found`,
+      );
+    }
 
     return product;
   }
@@ -189,8 +258,13 @@ export class ProductService {
   // PRISMA ERROR HANDLER
   // =========================
 
-  private handlePrismaError(error: unknown): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+  private handlePrismaError(
+    error: unknown,
+  ): never {
+    if (
+      error instanceof
+      Prisma.PrismaClientKnownRequestError
+    ) {
       switch (error.code) {
         case 'P2025':
           throw new NotFoundException(
