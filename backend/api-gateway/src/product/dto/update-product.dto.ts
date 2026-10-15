@@ -1,5 +1,4 @@
 import {
-  IsBoolean,
   IsNumber,
   IsOptional,
   IsString,
@@ -23,7 +22,7 @@ export class UpdateProductDto {
 
   @IsOptional()
   @IsNumber()
-  @Min(0)
+  @Min(0.01)
   price?: number;
 
   @IsOptional()
@@ -32,11 +31,10 @@ export class UpdateProductDto {
   @MaxLength(100)
   category?: string;
 
-  @IsOptional()
-  @IsUrl()
-  imageUrl?: string;
+@IsOptional()
+@IsString()
+@MaxLength(500)
+imageKey?: string;
 
-  @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
+  
 }

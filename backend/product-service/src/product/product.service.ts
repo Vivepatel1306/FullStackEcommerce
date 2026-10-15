@@ -15,172 +15,289 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { GetProductsDto } from './dto/get-products.dto';
 
 import { AuthenticatedUser } from '../common/interfaces/user.interface';
+import { S3Service } from '../s3/s3.service';
 
 @Injectable()
 export class ProductService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly s3Service: S3Service
   ) {}
+
+  
+private async isImageInUse(imageKey: string): Promise<boolean> {
+  const product = await this.prisma.product.findFirst({
+    where: {
+      imageKey,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  return product !== null;
+}
+
+private async validateImage(
+  imageKey: string | undefined,
+  user: AuthenticatedUser,
+) {
+  if (!imageKey) {
+    return;
+  }
+
+  if (
+    user.role !== 'ADMIN' &&
+    !imageKey.startsWith(`products/${user.sub}/`)
+  ) {
+    throw new ForbiddenException(
+      'You can only use your own uploaded images',
+    );
+  }
+
+  const exists = await this.s3Service.verifyObjectExists(
+    imageKey,
+  );
+
+  if (!exists) {
+    throw new NotFoundException(
+      'Image not found in S3',
+    );
+  }
+}
+
 
   // =========================
   // CREATE
   // =========================
 
-  async create(
-    createProductDto: CreateProductDto,
-    user: AuthenticatedUser,
-  ) {
-    try {
-      const product = await this.prisma.product.create({
-        data: {
-          name: createProductDto.name,
-          description: createProductDto.description,
-          price: createProductDto.price,
-          category: createProductDto.category,
-          imageUrl: createProductDto.imageUrl,
+  
+async create(
+  createProductDto: CreateProductDto,
+  user: AuthenticatedUser,
+) {
+  try {
+    await this.validateImage(
+      createProductDto.imageKey,
+      user,
+    );
 
-          // Store the authenticated user's ID
-          // as the product owner/vendor.
-          vendorId: user.sub,
+    const product = await this.prisma.product.create({
+      data: {
+        name: createProductDto.name,
+        description: createProductDto.description,
+        price: createProductDto.price,
+        category: createProductDto.category,
+        imageKey: createProductDto.imageKey,
+        vendorId: user.sub,
+        isActive: true,
+      },
+    });
 
-          isActive: true,
-        },
-      });
-
-      return {
-        message: 'Product created successfully',
-        product,
-      };
-    } catch (error) {
-      this.handlePrismaError(error);
+    return {
+      message: 'Product created successfully',
+      product,
+    };
+  } catch (error) {
+    if (
+      error instanceof ForbiddenException ||
+      error instanceof NotFoundException ||
+      error instanceof InternalServerErrorException
+    ) {
+      throw error;
     }
+
+    this.handlePrismaError(error);
   }
+}
 
   // =========================
   // GET ALL
   // =========================
 
-  async findAll( getProductsDto: GetProductsDto,
-  ) {
-    try {
-      const {
-        page = 1,
-        limit = 10,
-        search,
-        category,
-      } = getProductsDto;
+ async findAll(getProductsDto: GetProductsDto) {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      category,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+    } = getProductsDto;
 
-      const skip = (page - 1) * limit;
+    const skip = (page - 1) * limit;
 
-      const where: Prisma.ProductWhereInput = {
-        isActive: true,
+    const where: Prisma.ProductWhereInput = {
+      isActive: true,
 
-        ...(search && {
-          name: {
-            contains: search,
-            mode: 'insensitive',
-          },
-        }),
-
-        ...(category && {
-          category: {
-            equals: category,
-            mode: 'insensitive',
-          },
-        }),
-      };
-
-      const [products, total] = await Promise.all([
-        this.prisma.product.findMany({
-          where,
-          skip,
-          take: limit,
-          orderBy: {
-            createdAt: 'desc',
-          },
-        }),
-
-        this.prisma.product.count({
-          where,
-        }),
-      ]);
-
-      const totalPages = Math.ceil(
-        total / limit,
-      );
-
-      return {
-        products,
-
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages,
-
-          hasNextPage:
-            page < totalPages,
-
-          hasPreviousPage:
-            page > 1,
+      ...(search && {
+        name: {
+          contains: search,
+          mode: 'insensitive',
         },
-      };
-    } catch (error) {
-      this.handlePrismaError(error);
-    }
-  }
+      }),
 
+      ...(category && {
+        category: {
+          equals: category,
+          mode: 'insensitive',
+        },
+      }),
+    };
+
+    const [products, total] = await Promise.all([
+      this.prisma.product.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: {
+          [sortBy]: sortOrder,
+        },
+      }),
+
+      this.prisma.product.count({
+        where,
+      }),
+    ]
+  );
+
+    // Generate temporary S3 URLs for products that have images
+    const productsWithImageUrls = await Promise.all(
+      products.map(async (product) => {
+        let imageUrl: string | null = null;
+
+        if (product.imageKey) {
+          const result = await this.s3Service.generateViewUrl(
+            product.imageKey,
+          );
+
+          imageUrl = result.viewUrl;
+        }
+
+        return {
+          ...product,
+          imageUrl,
+        };
+      }),
+    );
+
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      products: productsWithImageUrls,
+
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
+      },
+    };
+  } catch (error) {
+    this.handlePrismaError(error);
+  }
+}
   // =========================
   // GET ONE
   // =========================
 
-  async findOne(id: number) {
-    return this.findActiveProduct(id);
+async findOne(id: number) {
+  const product = await this.prisma.product.findUnique({
+    where: { id },
+  });
+
+  if (!product) {
+    throw new NotFoundException('Product not found');
   }
 
+  let imageUrl: string | null = null;
+
+  if (product.imageKey) {
+    const result = await this.s3Service.generateViewUrl(
+      product.imageKey,
+    );
+
+    imageUrl = result.viewUrl;
+  }
+
+  return {
+    ...product,
+    imageUrl,
+  };
+}
   // =========================
   // UPDATE
   // =========================
 
-  async update(
-    id: number,
-    updateProductDto: UpdateProductDto,
-    user: AuthenticatedUser,
+  
+
+async update(
+  id: number,
+  updateProductDto: UpdateProductDto,
+  user: AuthenticatedUser,
+) {
+  const product = await this.findActiveProduct(id);
+
+  // 1. Verify product ownership.
+  if (
+    user.role === 'VENDOR' &&
+    product.vendorId !== user.sub
   ) {
-    const product =
-      await this.findActiveProduct(id);
-
-    // Vendors can only modify their own products.
-    // ADMIN can modify any product.
-    if (
-      user.role === 'VENDOR' &&
-      product.vendorId !== user.sub
-    ) {
-      throw new ForbiddenException(
-        'You can only update your own products',
-      );
-    }
-
-    try {
-      const updatedProduct =
-        await this.prisma.product.update({
-          where: {
-            id,
-          },
-
-          data: updateProductDto,
-        });
-
-      return {
-        message:
-          'Product updated successfully',
-
-        product: updatedProduct,
-      };
-    } catch (error) {
-      this.handlePrismaError(error);
-    }
+    throw new ForbiddenException(
+      'You can only update your own products',
+    );
   }
+
+  // 2. Validate the new image, if supplied.
+  if (updateProductDto.imageKey !== undefined) {
+    await this.validateImage(
+      updateProductDto.imageKey,
+      user,
+    );
+  }
+
+  try {
+    // 3. Update the database first.
+    const updatedProduct = await this.prisma.product.update({
+      where: { id },
+      data: updateProductDto,
+    });
+
+    const oldImageKey = product.imageKey;
+    const newImageKey = updatedProduct.imageKey;
+
+    // 4. Clean up the old image only when the key changes.
+    if (
+      oldImageKey &&
+      oldImageKey !== newImageKey
+    ) {
+      const stillInUse = await this.isImageInUse(oldImageKey);
+
+      if (!stillInUse) {
+        try {
+          await this.s3Service.deleteObject(oldImageKey);
+        } catch (error) {
+          // The database update succeeded. Don't report it
+          // as failed just because S3 cleanup failed.
+          console.error('Failed to clean up old S3 image:', error);
+        }
+      }
+    }
+
+    return {
+      message: 'Product updated successfully',
+      product: updatedProduct,
+    };
+  } catch (error) {
+    this.handlePrismaError(error);
+  }
+}
+
+
 
   // =========================
   // DELETE

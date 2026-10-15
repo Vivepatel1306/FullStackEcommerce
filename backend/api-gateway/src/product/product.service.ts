@@ -9,6 +9,7 @@ import { firstValueFrom } from 'rxjs';
 import axios from 'axios';
 import { ConfigService } from '@nestjs/config';
 import { JwtPayload } from '../auth/interfaces/jwt-payload.interface';
+import { CreateUploadUrlDto } from './dto/create-upload-url.dto';
 
 @Injectable()
 export class ProductService {
@@ -120,18 +121,68 @@ async create(
     this.handleError(error);
   }
 }
-  async remove(id: number,
-  user: JwtPayload) {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.delete(
-          `${this.productServiceUrl}/products/${id}`,
-        ),
-      );
+  
+async remove(id: number, authorization: string) {
+  try {
+    const response = await firstValueFrom(
+      this.httpService.delete(
+        `${this.productServiceUrl}/products/${id}`,
+        {
+          headers: {
+            Authorization: authorization,
+          },
+        },
+      ),
+    );
 
-      return response.data;
-    } catch (error) {
-      this.handleError(error);
-    }
+    return response.data;
+  } catch (error) {
+    this.handleError(error);
   }
+}
+
+  async generateUploadUrl(
+  data: CreateUploadUrlDto,
+  authorization: string,
+) {
+  try {
+    const response = await firstValueFrom(
+      this.httpService.post(
+        `${this.productServiceUrl}/products/images/upload-url`,
+        data,
+        {
+          headers: {
+            Authorization: authorization,
+          },
+        },
+      ),
+    );
+
+    return response.data;
+  } catch (error) {
+    this.handleError(error);
+  }
+}
+async generateViewUrl(
+  key: string,
+  authorization: string,
+) {
+  try {
+    const response = await firstValueFrom(
+      this.httpService.get(
+        `${this.productServiceUrl}/products/images/view-url`,
+        {
+          params: { key },
+          headers: {
+            Authorization: authorization,
+          },
+        },
+      ),
+    );
+
+    return response.data;
+  } catch (error) {
+    this.handleError(error);
+  }
+}
 }

@@ -23,6 +23,7 @@ import { GetProductsDto } from './dto/get-products.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CreateUploadUrlDto } from './dto/create-upload-url.dto';
 
 @Controller('products')
 export class ProductController {
@@ -87,17 +88,72 @@ update(
   );
 }
 
-  @Delete(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'VENDOR')
-  remove(
-    @Param('id', ParseIntPipe) id: number,
+  
+@Delete(':id')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN', 'VENDOR')
+remove(
+  @Param('id', ParseIntPipe) id: number,
+  @NestRequest() req: ExpressRequest,
+) {
+  const authorization = req.headers.authorization;
 
-    @NestRequest() req: ExpressRequest,
-  ) {
-    return this.productService.remove(
-      id,
-      req.user,
+  if (!authorization) {
+    throw new UnauthorizedException(
+      'Authorization header is missing',
     );
   }
+
+  return this.productService.remove(
+    id,
+    authorization,
+  );
+}
+
+  
+  
+  @Post('images/upload-url')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN', 'VENDOR')
+generateUploadUrl(
+  @Body() createUploadUrlDto: CreateUploadUrlDto,
+  @NestRequest() req: ExpressRequest,
+) {
+  const authorization = req.headers.authorization;
+
+  if (!authorization) {
+    throw new UnauthorizedException(
+      'Authorization header is missing',
+    );
+  }
+
+  return this.productService.generateUploadUrl(
+    createUploadUrlDto,
+    authorization,
+  );
+}
+
+
+
+@Get('images/view-url')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN', 'VENDOR')
+generateViewUrl(
+  @Query('key') key: string,
+  @NestRequest() req: ExpressRequest,
+) {
+  const authorization = req.headers.authorization;
+
+  if (!authorization) {
+    throw new UnauthorizedException(
+      'Authorization header is missing',
+    );
+  }
+
+  return this.productService.generateViewUrl(
+    key,
+    authorization,
+  );
+}
+  
 }

@@ -20,7 +20,7 @@ export class CreateProductDto {
   description?: string;
 
   @IsNumber()
-  @Min(0)
+  @Min(0.01)
   price: number;
 
   @IsString()
@@ -28,7 +28,9 @@ export class CreateProductDto {
   @MaxLength(100)
   category: string;
 
-  @IsOptional()
-  @IsUrl()
-  imageUrl?: string;
+
+@IsOptional()
+@IsString()
+@MaxLength(500)
+imageKey?: string;
 }

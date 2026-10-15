@@ -22,7 +22,7 @@ export class UpdateProductDto {
 
   @IsOptional()
   @IsNumber()
-  @Min(0)
+  @Min(0.01)
   price?: number;
 
   @IsOptional()
@@ -30,11 +30,10 @@ export class UpdateProductDto {
   @MinLength(2)
   @MaxLength(100)
   category?: string;
+@IsOptional()
+@IsString()
+@MaxLength(500)
+imageKey?: string;
 
-  @IsOptional()
-  @IsUrl()
-  imageUrl?: string;
-
-  @IsOptional()
-  isActive?: boolean;
+  
 }

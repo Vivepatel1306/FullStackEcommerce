@@ -14,17 +14,21 @@ import {
 
 import type { AuthenticatedRequest } from '../common/interfaces/authenticated-request.interface';
 
-import { ProductService } from './product.service';
+
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { GetProductsDto } from './dto/get-products.dto';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CreateUploadUrlDto } from './dto/create-upload-url.dto';
+import { ProductService } from './product.service';
+import { S3Service } from '../s3/s3.service';
 
 @Controller('products')
 export class ProductController {
   constructor(
     private readonly productService: ProductService,
+    private readonly s3Service: S3Service
   ) {}
 
   @Post()
@@ -78,4 +82,25 @@ export class ProductController {
       req.user,
     );
   }
+
+
+@Post('images/upload-url')
+@UseGuards(JwtAuthGuard)
+   async generateUploadUrl(
+  @Body() createUploadUrlDto: CreateUploadUrlDto,
+  @NestRequest() req: AuthenticatedRequest,
+) {
+  const key = `products/${req.user.sub}/${Date.now()}-${createUploadUrlDto.fileName}`;
+
+  return this.s3Service.generateUploadUrl(
+    key,
+    createUploadUrlDto.contentType,
+  );
+   }
+
+@Get('images/view-url')
+@UseGuards(JwtAuthGuard)
+   async generateViewUrl(@Query('key') key: string) {
+  return this.s3Service.generateViewUrl(key);
+   }
 }

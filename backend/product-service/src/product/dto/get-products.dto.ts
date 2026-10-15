@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -28,4 +29,12 @@ export class GetProductsDto {
   @IsOptional()
   @IsString()
   category?: string;
+
+  @IsOptional()
+  @IsIn(['name', 'price', 'createdAt'])
+  sortBy?: 'name' | 'price' | 'createdAt' = 'createdAt';
+
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  sortOrder?: 'asc' | 'desc' = 'desc';
 }
